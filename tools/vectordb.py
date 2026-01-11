@@ -9,7 +9,7 @@ class vectorDB:
     def __init__(self):
         # using a small embedding model
         self.embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
 
         # create folder if not present
@@ -43,8 +43,7 @@ class vectorDB:
 
     def query(self, query_text, k=4):
         try:
-            results = self.db.similarity_search(query_text, k=k)
-            print(len(results), "results found")
+            results = self.db.similarity_search(query_text, k=1)
             return results
         except Exception as err:
             print("Search error:", err)
