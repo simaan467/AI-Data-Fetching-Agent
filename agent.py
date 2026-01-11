@@ -9,22 +9,23 @@ class DataAgent:
         self.llm = llm
         self.db = vectorDB()
 
+    #generating multiple plan with reminders from past mistakes
     def generate_plan(self, query):
         past_mistakes = get_all_mistakes()
 
         reminders = []
         if past_mistakes.get("skipped_chroma", 0) > 0:
-            reminders.append("Always query Chroma DB first.")
+            reminders.append("Always query Chroma DB first")
         if past_mistakes.get("skipped_api", 0) > 0:
-            reminders.append("If data incomplete, call API.")
+            reminders.append("If data incomplete, call API")
         if past_mistakes.get("wrong_sequence", 0) > 0:
-            reminders.append("Do not call API before Chroma.")
+            reminders.append("Do not call API before Chroma")
         if past_mistakes.get("no_tool_used", 0) > 0:
-            reminders.append("At least one tool must be used.")
+            reminders.append("At least one tool must be used")
         if past_mistakes.get("ignored_output", 0) > 0:
-            reminders.append("Always use tool outputs to answer.")
+            reminders.append("Always use tool outputs to answer")
 
-        reminder_text = "\n".join(reminders) if reminders else "No special rules."
+        reminder_text = "\n".join(reminders) if reminders else "No special rules"
 
         prompt = f"""
 You are a planning agent. Your output must follow STRICT rules.
@@ -69,15 +70,13 @@ ONLY return the 3 steps.
         api_data = None
         vector_data = None
         answer = None
-
         steps = []
         plan_lines = [line.strip() for line in plan.split("\n") if line.strip()]
 
         for line in plan_lines:
             lower = line.lower()
-
+            # First step to be chroma
             if lower.startswith("1."):
-                # First step must be chroma
                 steps.append("Selected tool: chroma")
                 try:
                     vector_data = self.db.query(query)
@@ -85,7 +84,7 @@ ONLY return the 3 steps.
                 except:
                     steps.append("Chroma DB error")
                 continue
-
+            # second step to be api
             if lower.startswith("2.") and "api" in lower:
                 steps.append("selected_tool:api")
                 try:
@@ -101,7 +100,7 @@ ONLY return the 3 steps.
                 continue
 
         return steps, answer
-
+    #if both db and api data present, combine
     def combine(self, db, api):
         result = {}
         if db:

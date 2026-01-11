@@ -41,9 +41,9 @@ class vectorDB:
         except Exception as err:
             print("Error adding docs:", err)
 
-    def query(self, query_text, k=4):
+    def query(self, query_text, k=1):
         try:
-            results = self.db.similarity_search(query_text, k=1)
+            results = self.db.similarity_search(query_text, k=k)
             return results
         except Exception as err:
             print("Search error:", err)

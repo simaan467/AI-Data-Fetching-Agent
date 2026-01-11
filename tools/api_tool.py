@@ -1,5 +1,6 @@
 import requests
 
+#api tool to fetch city data from wikipedia
 def fetch_api_data(city_name):
     try:
         city_name = city_name.strip().title()
