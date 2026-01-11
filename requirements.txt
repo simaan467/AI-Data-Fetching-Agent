@@ -4,3 +4,4 @@ sentence-transformers
 requests
 python-dotenv
 google-generativeai
+google-genai
