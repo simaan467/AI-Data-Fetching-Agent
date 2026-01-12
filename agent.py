@@ -1,6 +1,7 @@
+from memory import mistakes
 from tools.api_tool import fetch_api_data
 from tools.vectordb import vectorDB
-from memory.mistakes import get_all_mistakes
+from memory.mistakes import get_all_mistakes,record_mistake
 from evaluation.evaluator import evaluate_run
 
 
@@ -11,95 +12,104 @@ class DataAgent:
 
     #generating multiple plan with reminders from past mistakes
     def generate_plan(self, query):
-        past_mistakes = get_all_mistakes()
-
+        mistakes = get_all_mistakes()
         reminders = []
-        if past_mistakes.get("skipped_chroma", 0) > 0:
-            reminders.append("Always query Chroma DB first")
-        if past_mistakes.get("skipped_api", 0) > 0:
-            reminders.append("If data incomplete, call API")
-        if past_mistakes.get("wrong_sequence", 0) > 0:
-            reminders.append("Do not call API before Chroma")
-        if past_mistakes.get("no_tool_used", 0) > 0:
-            reminders.append("At least one tool must be used")
-        if past_mistakes.get("ignored_output", 0) > 0:
-            reminders.append("Always use tool outputs to answer")
+        if mistakes.get("skipped_chroma", 0):
+            reminders.append("- Step 1 must ALWAYS be Chroma DB.")
+        if mistakes.get("skipped_api", 0):
+            reminders.append("- Step 2 must include API Tool.")
+        if mistakes.get("wrong_sequence", 0):
+            reminders.append("- Tool order must be: Chroma → API → Final Answer.")
+        if mistakes.get("ignored_output", 0):
+            reminders.append("- Never generate answer without using all required tools.")
+        if mistakes.get("no_tool_used", 0):
+            reminders.append("- Both tools are required before final answer.")
 
-        reminder_text = "\n".join(reminders) if reminders else "No special rules"
+        reminder_text = "\n".join(reminders) if reminders else "No special rules."
+    
 
         prompt = f"""
-You are a planning agent. Your output must follow STRICT rules.
+You are a planning agent that generates a 3-step plan for answering the user.
 
 USER QUERY: "{query}"
 
-PAST MISTAKE REMINDERS:
+PAST MISTAKE HISTORY:
 {reminder_text}
 
-REQUIRED OUTPUT FORMAT:
-Return EXACTLY 3 lines, like:
-1. <first step>
-2. <second step>
-3. <third step>
-
 RULES:
--YOU MUST include "1.", "2.", and "3." at the start of each step.
--If you do not follow this format EXACTLY, the system will fail.
-- Each step must be a single short sentence.
-- STEP 1 MUST always be: "Use Chroma DB".
-- STEP 2 MAY be: "Use API Tool" ONLY if necessary.
-- STEP 3 MUST always be: "Generate final answer".
-- You MUST NOT use markdown, tables, formatting, lists, bullets, or extra text.
-- You MUST NOT explain anything.
-- Do NOT repeat any tool.
-- Do NOT add extra lines.
+- You MUST output exactly 3 steps.
+- Steps MUST be written as:
+  1. <text>
+  2. <text>
+  3. <text>
+- You MAY use tools (Chroma DB, API Tool).
+- You MAY generate steps in any order.
+- You MAY skip a tool.
+- You MAY incorrectly order steps.
+- You MAY incorrectly skip required tools.
+- You MAY generate the final answer too early.
 
-ONLY return the 3 steps.
-"""
+Using the past mistakes as hints, improve your plan over time.
 
+Return ONLY the 3 steps.
+        """
 
-        # to get response from GenAI
         response = self.llm.models.generate_content(
             model="models/gemini-flash-latest",
             contents=prompt
         )
 
-        plan = response.text
-        return plan
+        return response.text
 
     def execute_plan(self, plan, query):
-        api_data = None
-        vector_data = None
-        answer = None
         steps = []
+        mistakes = []
+
         plan_lines = [line.strip() for line in plan.split("\n") if line.strip()]
+        if len(plan_lines) != 3:
+            record_mistake("invalid_plan_format")
+            return steps, {"error": "Invalid plan format"}
 
-        for line in plan_lines:
-            lower = line.lower()
-            # First step to be chroma
-            if lower.startswith("1."):
-                steps.append("Selected tool: chroma")
-                try:
-                    vector_data = self.db.query(query)
-                    steps.append("Used Chroma DB")
-                except:
-                    steps.append("Chroma DB error")
-                continue
-            # second step to be api
-            if lower.startswith("2.") and "api" in lower:
-                steps.append("selected_tool:api")
-                try:
-                    api_data = fetch_api_data(query)
-                    steps.append("Called API")
-                except:
-                    steps.append("API error")
-                continue
 
-            if lower.startswith("3."):
-                steps.append("Generated answer")
-                answer = self.combine(vector_data, api_data)
-                continue
+        # Validate exact structure
+        if not plan_lines[0].lower().startswith("1. use chroma db"):
+            mistakes.append("skipped_chroma")
+
+        if not plan_lines[2].lower().startswith("3. generate final answer"):
+            mistakes.append("answer_too_early")
+
+        use_api = "api" in plan_lines[1].lower()
+
+        #1 Chroma
+        try:
+            vector_data = self.db.query(query)
+            steps.append("Used Chroma DB")
+        except:
+            vector_data = None
+            mistakes.append("chroma_error")
+
+        #API
+        api_data = None
+        if use_api or not vector_data:
+            try:
+                api_data = fetch_api_data(query)
+                steps.append("Called API Tool")
+            except:
+                mistakes.append("api_error")
+
+        # Generate final answer
+        answer = self.combine(vector_data, api_data)
+        steps.append("Generated final answer")
+
+        # Save mistakes to memory
+        for m in mistakes:
+            record_mistake(m)
+
 
         return steps, answer
+
+    
+
     #if both db and api data present, combine
     def combine(self, db, api):
         result = {}

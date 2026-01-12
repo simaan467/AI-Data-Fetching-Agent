@@ -2,7 +2,8 @@ import json
 import os
 
 #to store mistakes
-MISTAKES_FILE = "mistakes.json"
+MISTAKES_FILE = os.path.join(os.path.dirname(__file__), "mistakes.json")
+
 
 
 #to load memory from file
@@ -25,11 +26,20 @@ def save_memory(data):
 #to record a mistake
 def record_mistake(mistake_name):
     data = load_memory()
+
+    # ensure patterns exists
+    if "patterns" not in data:
+        data["patterns"] = {}
+
     if mistake_name not in data["patterns"]:
         data["patterns"][mistake_name] = 1
     else:
         data["patterns"][mistake_name] += 1
+
     save_memory(data)
+    print("LOGGED MISTAKE:", mistake_name)
+
+
 
 #to get count of a specific mistake
 def get_mistake_count(mistake_name):
@@ -40,4 +50,5 @@ def get_mistake_count(mistake_name):
 def get_all_mistakes():
     data = load_memory()
     return data["patterns"]
+
 

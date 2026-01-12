@@ -15,6 +15,14 @@ def seed_vector_db():
     "source": "local_knowledge"
         },
         {
+    "text": "delhi is the capital city of India",
+    "source": "local_knowledge"
+        },
+        {
+    "text": "Kashmir is known for its beautiful valleys",
+    "source": "local_knowledge"
+        },
+        {
     "text": "The Taj Mahal is located in Agra",
     "source": "local_knowledge"
         }
